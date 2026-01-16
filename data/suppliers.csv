@@ -1,0 +1,16 @@
+supplier_id,supplier_name,category,country,financial_risk_score
+S001,Supplier 01,Packaging,DE,94
+S002,Supplier 02,Logistics,NL,28
+S003,Supplier 03,Raw Materials,PL,86
+S004,Supplier 04,Textiles,PL,75
+S005,Supplier 05,Electronics,DE,3
+S006,Supplier 06,Packaging,NL,29
+S007,Supplier 07,Textiles,DE,71
+S008,Supplier 08,Raw Materials,CN,53
+S009,Supplier 09,Raw Materials,TR,75
+S010,Supplier 10,Logistics,DE,97
+S011,Supplier 11,Raw Materials,FR,43
+S012,Supplier 12,Logistics,CZ,27
+S013,Supplier 13,Logistics,PL,11
+S014,Supplier 14,Electronics,PL,45
+S015,Supplier 15,Logistics,IT,5
