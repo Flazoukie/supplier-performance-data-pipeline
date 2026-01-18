@@ -1,3 +1,18 @@
+"""This script generates synthetic data for suppliers, purchase orders, and deliveries.
+The data is saved as CSV files in the 'data/' directory.
+
+We generate 600 rows of data for purchase orders and deliveries from 15 suppliers and consider 1 year window (year 2024).
+We simulate realistic behaviors considering:
+- Lead times promised by suppliers
+- Delivery lateness (on-time, early, late) - we go for 22% arriving late and 8% early to simulate real-world scenarios
+- Partial deliveries - 18& of partial delivery, with a range between 60% and 95% of ordered quantity
+- Quality issues - we simulate a baseline defect rate of 4%. 
+
+example of generated purchase order: 
+po = {"po_id": "PO00123", "supplier_id": "S007", "order_date": "2024-06-10", "promised_date": "2024-06-22", "quantity_ordered": 240}
+"""
+
+# libraries
 from __future__ import annotations
 
 import os
@@ -8,22 +23,27 @@ from random import Random
 import csv
 
 
+# configurations
 @dataclass
 class Config:
-    seed: int = 42
-    n_suppliers: int = 15
+    seed: int = 42 # makes it reproducible
+
+    # suppliers purchase orders
+    n_suppliers: int = 15 # num of suppliers
     n_pos: int = 600  # total purchase orders
+
+    # observation windown (1 year)
     start_date: date = date(2024, 1, 1)
     end_date: date = date(2024, 12, 31)
 
-    # Lead time (promised_date - order_date)
+    # Lead time (promised_date - order_date) - how long suppliers say it will take to deliver the product
     lead_time_min_days: int = 3
     lead_time_max_days: int = 21
 
     # Delivery lateness (delivery_date - promised_date)
-    # We'll make most on time, some late, a few early.
-    late_prob: float = 0.22
-    early_prob: float = 0.08
+    # We generate: most on time, some late, a few early. Delay range: 1 to 14 days.
+    late_prob: float = 0.22 # 22% are late
+    early_prob: float = 0.08 # 8% are early
     late_min_days: int = 1
     late_max_days: int = 14
     early_min_days: int = 1
@@ -32,14 +52,18 @@ class Config:
     # Quantity & quality
     qty_min: int = 10
     qty_max: int = 500
-    partial_delivery_prob: float = 0.18
-    partial_min_ratio: float = 0.6
-    partial_max_ratio: float = 0.95
-    base_quality_issue_prob: float = 0.04  # baseline probability
+    partial_delivery_prob: float = 0.18 # 18% chance of partial delivery
+    partial_min_ratio: float = 0.6 # partial delivery between 60% ...
+    partial_max_ratio: float = 0.95 # and 95% of ordered quantity
+    base_quality_issue_prob: float = 0.04  # baseline probability - 4% of the devlivered products have defects
 
 
+# categories and countries
 CATEGORIES = ["Packaging", "Raw Materials", "Logistics", "Electronics", "Textiles"]
 COUNTRIES = ["DE", "PL", "CZ", "NL", "IT", "ES", "FR", "TR", "CN"]
+
+
+# generate csv files
 
 
 def rand_date(rng: Random, start: date, end: date) -> date:
@@ -48,7 +72,8 @@ def rand_date(rng: Random, start: date, end: date) -> date:
     return start + timedelta(days=rng.randint(0, span))
 
 
-def clamp(x: float, lo: float, hi: float) -> float:
+def clamp(x: float, lo: float, hi: float) -> float: # forces x to be between lo and hi.
+    # We use it. e.g., when increasing probabilities based on risk scores, to avoid the risk of havinga  probablitity higher than 1.
     return max(lo, min(hi, x))
 
 
@@ -93,16 +118,18 @@ def main() -> None:
         }
 
     # --- Purchase Orders ---
+    """"Generate purchase orders with order date, promised date, and quantity ordered."""
+
     purchase_orders = []
     for j in range(1, cfg.n_pos + 1):
-        po_id = f"PO{j:05d}"
-        supplier_id = rng.choice(suppliers)["supplier_id"]
-        order_date = rand_date(rng, cfg.start_date, cfg.end_date)
+        po_id = f"PO{j:05d}" # e.g., po_id = "PO00123"
+        supplier_id = rng.choice(suppliers)["supplier_id"] # e.g., supplier_id = "S007"
+        order_date = rand_date(rng, cfg.start_date, cfg.end_date) # e.g., order_date = 2024-06-10
 
-        lead_time = rng.randint(cfg.lead_time_min_days, cfg.lead_time_max_days)
-        promised_date = order_date + timedelta(days=lead_time)
+        lead_time = rng.randint(cfg.lead_time_min_days, cfg.lead_time_max_days) # e.g., lead_time = 12 days
+        promised_date = order_date + timedelta(days=lead_time) # e.g., promised_date = 2024-06-10 + 12 days = 2024-06-22
 
-        qty = rng.randint(cfg.qty_min, cfg.qty_max)
+        qty = rng.randint(cfg.qty_min, cfg.qty_max) # quantity_ordered = 240
 
         purchase_orders.append(
             {
@@ -112,34 +139,39 @@ def main() -> None:
                 "promised_date": promised_date.isoformat(),
                 "quantity_ordered": qty,
             }
-        )
+        ) # e.g, po = {"po_id": "PO00123", "supplier_id": "S007", "order_date": "2024-06-10", "promised_date": "2024-06-22", "quantity_ordered": 240}
+
+
 
     # --- Deliveries (1 per PO in this minimal scope) ---
     deliveries = []
     for po in purchase_orders:
         supplier_id = po["supplier_id"]
-        prof = supplier_profile[supplier_id]
+        prof = supplier_profile[supplier_id] # Looks up that supplier’s “behavior profile” dictionary,
+        #i.e., probability of delay, probability of partial delivery or probability of delivering defective products
 
         promised = date.fromisoformat(po["promised_date"])
 
         # Decide early / late / on-time
         r = rng.random()
-        if r < prof["late_prob"]:
-            delay = rng.randint(cfg.late_min_days, cfg.late_max_days)
+        if r < prof["late_prob"]: # if the random number falls under the supplier's late probability, then the product is late
+            delay = rng.randint(cfg.late_min_days, cfg.late_max_days) # chose how many days of delay
             delivery_date = promised + timedelta(days=delay)
-        elif r < prof["late_prob"] + cfg.early_prob:
-            early = rng.randint(cfg.early_min_days, cfg.early_max_days)
+        elif r < prof["late_prob"] + cfg.early_prob: # The early probability is fixed (0.8) and does not depend on the supplier profile
+            # if r falls between the late_prob and late_prob + early_prob, then the product is early.
+            early = rng.randint(cfg.early_min_days, cfg.early_max_days) # chose how early
             delivery_date = promised - timedelta(days=early)
         else:
-            # on promised date
+            # on promised date (on time)
             delivery_date = promised
 
         ordered = int(po["quantity_ordered"])
 
         # Partial deliveries
-        if rng.random() < prof["partial_prob"]:
-            ratio = rng.uniform(cfg.partial_min_ratio, cfg.partial_max_ratio)
-            delivered_qty = max(0, int(round(ordered * ratio)))
+        if rng.random() < prof["partial_prob"]: # if the random number falls under the supplier's partial delivery probability,
+            # then it's a partial delivery
+            ratio = rng.uniform(cfg.partial_min_ratio, cfg.partial_max_ratio) # get a random ratio between 60% and 95%
+            delivered_qty = max(0, int(round(ordered * ratio))) # calculate the delivered quantity
         else:
             delivered_qty = ordered
 
