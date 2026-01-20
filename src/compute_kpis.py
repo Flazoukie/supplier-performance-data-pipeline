@@ -6,6 +6,7 @@ import duckdb
 
 # Compute KPIs and create supplier_kpis table in DuckDB
 def main() -> None:
+    # set up paths
     project_root = Path(__file__).resolve().parents[1]
     db_path = project_root / "warehouse.db"
 
@@ -15,8 +16,10 @@ def main() -> None:
     con.execute("DROP TABLE IF EXISTS supplier_kpis;")
 
     # Create KPI table from a join of suppliers + POs + deliveries
+
     con.execute(
         """
+        -- join suppliers, purchase_orders, and deliveries
         CREATE TABLE supplier_kpis AS
         WITH joined AS (
             SELECT
@@ -42,6 +45,8 @@ def main() -> None:
             JOIN deliveries d
                 ON po.po_id = d.po_id
         )
+
+        -- aggregate to supplier level
         SELECT
             supplier_id,
             supplier_name,
@@ -49,12 +54,12 @@ def main() -> None:
             country,
             financial_risk_score,
 
-            AVG(on_time_flag)::DOUBLE AS on_time_delivery_rate,
-            AVG(delivery_delay_days)::DOUBLE AS avg_delivery_delay_days,
+            AVG(on_time_flag)::DOUBLE AS on_time_delivery_rate, -- proportion of POs delivered on time (on_time_flag can be 1 or 0)
+            AVG(delivery_delay_days)::DOUBLE AS avg_delivery_delay_days, -- average delay in days (can be negative)
 
-            (SUM(quantity_delivered)::DOUBLE / NULLIF(SUM(quantity_ordered), 0)) AS fill_rate,
+            (SUM(quantity_delivered)::DOUBLE / NULLIF(SUM(quantity_ordered), 0)) AS fill_rate, -- proportion of ordered quantity that was actually delivered
 
-            AVG(quality_issues)::DOUBLE AS quality_issue_rate,
+            AVG(quality_issues)::DOUBLE AS quality_issue_rate, -- proportion of deliveries with quality issues
 
             COUNT(*) AS n_pos
         FROM joined
