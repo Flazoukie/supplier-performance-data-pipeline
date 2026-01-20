@@ -1,3 +1,7 @@
+"""This script joins suppliers, purchase orders, and deliveries into a single per-PO dataset,
+derives on-time and delay metrics, then aggregates per supplier to compute the four KPIs and
+stores them in DuckDB as supplier_kpis for downstream risk scoring and the dashboard"""
+
 # libraries
 from __future__ import annotations # makes type hints work for Python versions < 3.10
 
