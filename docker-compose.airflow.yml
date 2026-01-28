@@ -1,0 +1,147 @@
+# docker-compose.airflow.yml
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: supplier-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: always
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: supplier-airflow-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+      AIRFLOW__CORE__FERNET_KEY: "dGhpcy1pcy1hLWRlbW8tZmVybmV0LWtleS0xMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+      AIRFLOW__WEBSERVER__SECRET_KEY: "demo-secret-key"
+
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+    volumes:
+      - ./:/opt/airflow
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - |
+        set -e
+        cd /opt/airflow
+
+        if [ -f requirements.txt ]; then
+          python -m pip install -r requirements.txt
+        fi
+
+        airflow db migrate
+
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com || true
+
+  webserver:
+    image: apache/airflow:2.9.3
+    container_name: supplier-airflow-webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
+
+      AIRFLOW__CORE__FERNET_KEY: "dGhpcy1pcy1hLWRlbW8tZmVybmV0LWtleS0xMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+      AIRFLOW__WEBSERVER__SECRET_KEY: "demo-secret-key"
+
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+    volumes:
+      - ./:/opt/airflow
+    ports:
+      - "8080:8080"
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - |
+        set -e
+        cd /opt/airflow
+        if [ -f requirements.txt ]; then
+          python -m pip install -r requirements.txt
+        fi
+        exec airflow webserver
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  scheduler:
+    image: apache/airflow:2.9.3
+    container_name: supplier-airflow-scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__FERNET_KEY: "dGhpcy1pcy1hLWRlbW8tZmVybmV0LWtleS0xMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+      AIRFLOW__WEBSERVER__SECRET_KEY: "demo-secret-key"
+
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+    volumes:
+      - ./:/opt/airflow
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - |
+        set -e
+        cd /opt/airflow
+        if [ -f requirements.txt ]; then
+          python -m pip install -r requirements.txt
+        fi
+        exec airflow scheduler
+    restart: always
+
+volumes:
+  postgres-db-volume:

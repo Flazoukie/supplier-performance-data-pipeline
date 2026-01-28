@@ -1,10 +1,18 @@
+# Airflow
+.env
+airflow.cfg
+airflow-webserver.pid
+webserver_config.py
+logs/
+plugins/__pycache__/
+
+# Databases / artifacts
+warehouse.db
+data/
+
 # Python
 __pycache__/
 *.pyc
 
-# VS Code
+#vs code
 .vscode/
-
-# OS
-.DS_Store
-Thumbs.db
